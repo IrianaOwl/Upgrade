@@ -1,0 +1,6 @@
+## Interface: 110002
+## Version: 1.0.0
+## Title: Upgrade
+## Author: IrianaOwl
+## SavedVariables: UpgradeDB
+Upgrade.lua
