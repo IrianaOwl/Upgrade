@@ -1,120 +1,140 @@
--- Mapping item types to the slot they are in on the character window
+-- Upgrade.lua
+-- Check for item level upgrades in the player's inventory and print that to the chat box, all pretty and color-coded to item rarity when you click a button
+
+-- Load class gear types from classGear.lua
+local _, playerClass = UnitClass("player")
+local validGearTypes = ClassGearTypes[playerClass] or {}
+
+-- Mapping of inventory slots to readable names
+local slotNamesReadable = {
+    HeadSlot = "Head",
+    NeckSlot = "Neck",
+    ShoulderSlot = "Shoulders",
+    BackSlot = "Back",  -- Ensure this is included
+    ChestSlot = "Chest",
+    ShirtSlot = "Shirt",
+    TabardSlot = "Tabard",
+    WristSlot = "Wrist",
+    HandsSlot = "Hands",
+    WaistSlot = "Waist",
+    LegsSlot = "Legs",
+    FeetSlot = "Feet",
+    Finger0Slot = "Ring 1",
+    Finger1Slot = "Ring 2",
+    Trinket0Slot = "Trinket 1",
+    Trinket1Slot = "Trinket 2",
+    MainHandSlot = "Main Hand",
+    SecondaryHandSlot = "Off Hand",
+}
+
+-- Mapping of equipped item types to their corresponding inventory slot IDs
 local slotNames = {
-    ["INVTYPE_HEAD"] = 1,
-    ["INVTYPE_NECK"] = 2,
-    ["INVTYPE_SHOULDER"] = 3,
-    ["INVTYPE_BODY"] = 4, -- Shirt
-    ["INVTYPE_CHEST"] = 5,
-    ["INVTYPE_ROBE"] = 5, -- Robe uses the Chest slot
-    ["INVTYPE_WAIST"] = 6,
-    ["INVTYPE_LEGS"] = 7,
-    ["INVTYPE_FEET"] = 8,
-    ["INVTYPE_WRIST"] = 9,
-    ["INVTYPE_HAND"] = 10,
-    ["INVTYPE_FINGER"] = 11, -- Finger 1 or Finger 2
-    ["INVTYPE_TRINKET"] = 13, -- Trinket 1 or Trinket 2
-    ["INVTYPE_CLOAK"] = 15, -- Back
-    ["INVTYPE_2HWEAPON"] = 16, -- Two-Handed uses the Main Hand slot
-    ["INVTYPE_WEAPONMAINHAND"] = nil, -- Exclude Main Hand weapons
-    ["INVTYPE_WEAPONOFFHAND"] = nil, -- Exclude Off Hand weapons
-    ["INVTYPE_HOLDABLE"] = nil, -- Exclude Held in Off Hand
-    ["INVTYPE_RANGED"] = nil, -- Exclude Ranged
-    ["INVTYPE_THROWN"] = nil, -- Exclude Thrown
-    ["INVTYPE_RANGEDRIGHT"] = nil, -- Exclude Right Ranged (guns, bows)
-    ["INVTYPE_TABARD"] = nil, -- Exclude Tabard
+    ["INVTYPE_HEAD"] = "HeadSlot",
+    ["INVTYPE_NECK"] = "NeckSlot",
+    ["INVTYPE_SHOULDER"] = "ShoulderSlot",
+    ["INVTYPE_CLOAK"] = "BackSlot", -- Ensure this is present for back items
+    ["INVTYPE_CHEST"] = "ChestSlot",
+    ["INVTYPE_ROBE"] = "ChestSlot",
+    ["INVTYPE_SHIRT"] = "ShirtSlot",
+    ["INVTYPE_TABARD"] = "TabardSlot",
+    ["INVTYPE_WRIST"] = "WristSlot",
+    ["INVTYPE_HAND"] = "HandsSlot",
+    ["INVTYPE_WAIST"] = "WaistSlot",
+    ["INVTYPE_LEGS"] = "LegsSlot",
+    ["INVTYPE_FEET"] = "FeetSlot",
+    ["INVTYPE_FINGER"] = {"Finger0Slot", "Finger1Slot"}, -- Rings
+    ["INVTYPE_TRINKET"] = {"Trinket0Slot", "Trinket1Slot"}, -- Trinkets
+    ["INVTYPE_2HWEAPON"] = "MainHandSlot", -- 2H weapons
+    ["INVTYPE_WEAPON"] = "MainHandSlot", -- 1H weapons
+    ["INVTYPE_WEAPONMAINHAND"] = "MainHandSlot", -- Main hand weapon
+    ["INVTYPE_WEAPONOFFHAND"] = "SecondaryHandSlot", -- Off hand weapon
+    ["INVTYPE_HOLDABLE"] = "SecondaryHandSlot", -- Holdable items
 }
 
--- Make the slot numbers readable
-local readableSlotNames = {
-    [1] = "Head",
-    [2] = "Neck",
-    [3] = "Shoulder",
-    [4] = "Shirt",
-    [5] = "Chest",
-    [6] = "Waist",
-    [7] = "Legs",
-    [8] = "Feet",
-    [9] = "Wrist",
-    [10] = "Hands",
-    [11] = "Finger",
-    [13] = "Trinket",
-    [15] = "Back",
-    [16] = "Two-Handed Weapon",
-}
+local function CompareInventoryToEquipped()
+    local printedItems = {}
+    local upgradesFound = false
 
--- Rarity color codes so it's pretty when it prints
-local rarityColors = {
-    [1] = "|cffffffff", -- Common
-    [2] = "|cff1eff00", -- Uncommon
-    [3] = "|cff0070dd", -- Rare
-    [4] = "|cffa335ee", -- Epic
-    [5] = "|cffff8000", -- Legendary
-}
+    -- Loop through the player's bags (bag slots 0 through 4)
+    for bag = 0, 4 do
+        local numSlots = C_Container.GetContainerNumSlots(bag)
+        for slot = 1, numSlots do
+            local itemLink = C_Container.GetContainerItemLink(bag, slot)
+            if itemLink then
+                -- Retrieve item info from inventory
+                local itemName, _, itemRarity, _, _, _, itemSubType, _, equipSlot = GetItemInfo(itemLink)
+                local itemLevel = GetDetailedItemLevelInfo(itemLink)
 
--- Here we check the item level of the players equipped items, if nothing is equipped, it's 0
-local function GetEquippedItemLevel(slotId) -- defining the function, in this case GetEquippedItemLevel with the parameter slotID, which represents the slot ID of the item we are checking eg. Head, Neck
-    local itemLink = GetInventoryItemLink("player", slotId) --gets the item link for an item in a specified slot, its checking player, then slot ID and returns a link to the item equipped 
-    if itemLink then -- this checks to see if an item link was succesfully obtained
-        local _, _, _, itemLevel = GetItemInfo(itemLink) -- gets detailed info from the item link, the underscores are values we aren't using for comparing upgrades like item name and rarity, but item level is returned as its named specifically
-        return itemLevel or 0 -- this returns the item level if there is an item equipped, if there isn't it defaults to 0
-    end
-    return 0 -- if no item link is found and the function returns 0, there is no item equipped
-end
+                -- Check if item type matches the class-specific gear types
+                local isValidType = false
+                if tContains(validGearTypes, itemSubType) or itemSubType == "Miscellaneous" then
+                    isValidType = true
+                else
+                    -- Check for alternative types if the item is a finger, trinket, or back item
+                    if equipSlot == "INVTYPE_FINGER" or equipSlot == "INVTYPE_TRINKET" or equipSlot == "INVTYPE_CLOAK" then
+                        isValidType = true
+                    end
+                end
 
--- Check if an item is Armor and if that armor is plate 
-local function IsPlateArmor(itemLink) -- defines a local function IsPlateArmor that checks the item link 
-    local _, _, _, _, _, itemType, itemSubType = GetItemInfo(itemLink) -- as with the other function, we're check GetItemInfo for item type and item subtype, the underscore are data we aren't looking at
-    return itemType == "Armor" and itemSubType == "Plate" -- here we're looking specifically for item type armor and even more specifically for plate armor, we only want to check items have both parameters returned true 
-end
+                if isValidType then
+                    local inventorySlotId = slotNames[equipSlot]
 
--- This part gathers information from the inventory and identifies where it would go if it is equipped eg. itemslot 
-local function CompareInventoryToEquipped() -- defines a local function that we will use to compare equipped items to inventory items 
-    local printedItems = {} -- creates an empty table to keep track of which items are already printed to prevent them from printing multiple times
-    for bag = 0, 4 do  -- looks at the items in the players bags 0 backpack through 4 additional bags 
-        local numSlots = C_Container.GetContainerNumSlots(bag) -- the funtion c_container.GetContainerNumSlots(bag) retrives the number of slots in the current (bag), numSlots will return the number of slots 
-        for slot = 1, numSlots do -- this looks at all the slots in a bag, from slot 1 to what is returned by numSlots
-            local itemLink = C_Container.GetContainerItemLink(bag, slot) -- this gets the itemLink to whatever item is in a given bag and slot combination, determined by the last two lines 
-            if itemLink then -- this is checking if there is an item there or not 
-                local itemName, _, itemRarity, itemLevel, _, _, itemSubType, _, equipSlot = GetItemInfo(itemLink) -- if an item exists it uses GetItemInfo to get the specified data, as before underscores are data we aren't looking at 
-                local inventorySlotId = slotNames[equipSlot] -- this looks up the inventory slot based on the equipslot value using the slotnames table, eg. if equipslot is INVTYPE_HEAD, inventory slot would be 1
+                    if inventorySlotId then
+                        if type(inventorySlotId) == "table" then
+                            -- Handle slots with multiple possible locations (e.g., finger/trinket)
+                            for _, slotId in ipairs(inventorySlotId) do
+                                local equippedItemLink = GetInventoryItemLink("player", GetInventorySlotInfo(slotId))
 
-                -- Check if an item is Plate, a valid two-handed weapon, or accessories, results are stored in the variables listed 
-                local isPlate = IsPlateArmor(itemLink) -- this variable calls the previous function we made to check if something is plate 
-                local validTwoHanded = equipSlot == "INVTYPE_2HWEAPON" and (itemSubType == "Two-Handed Swords" or itemSubType == "Two-Handed Maces" or itemSubType == "Two-Handed Axes" or itemSubType == "Polearms") -- here we're looking for specific 2hand weapons only, so we defining it by some of the itemSubTypes, they have to be a two handed weapon AND one of the other subtypes
-                local validNeck = equipSlot == "INVTYPE_NECK" -- same thing but with neck items
-                local validFinger = equipSlot == "INVTYPE_FINGER" -- again same with rings
-                local validTrinket = equipSlot == "INVTYPE_TRINKET" -- and the same with trinkets
+                                -- If there's no equipped item, consider it an upgrade
+                                if not equippedItemLink or (itemLevel > GetDetailedItemLevelInfo(equippedItemLink)) then
+                                    upgradesFound = true
+                                    printedItems[itemLink] = true
 
-                -- Now that we defined what we're looking for, we check to see if inventory items we looked at are valid and then compares them to equipped items
-                if (isPlate or validTwoHanded or validNeck or validFinger or validTrinket) then -- if the above definitions are true we continue, if false, its skipped
-                    local equippedItemLevel = GetEquippedItemLevel(inventorySlotId or (validTwoHanded and 16 or (validNeck and 2 or (validFinger and 11 or (validTrinket and 13 or nil))))) -- For 2hand weapons, we checking slot ID 16; for other types, use the correct slot ID 
-						-- here the variable equippedItemLevel stores the item level of the currently equipped item in the slot listed in the arguement, GetEquippedItemLevel is the function we made above, the arguement is checking the "valid" items from inventory against the inventory slot id
-					
-                    -- Here is where we determine if something is an upgrade, check the rarity and name and formats the print message
-                    if itemLevel > equippedItemLevel then -- this is the comparison of the item level of the inventory item to the one currently equipped
-                        local rarityColor = rarityColors[itemRarity] or "|cffffffff" -- this calls the rarity color so the printed message is pretty, no rarity is found, it'll just be white
-                        local readableSlotName = readableSlotNames[inventorySlotId] or equipSlot -- this looks up the readable slot name so that it doesn't just say invslot_head or something 
-                        print(string.format("%sUpgrade found: %s%s (Item Level: %d) in Bag %d, Slot %d is better than equipped %s",  -- this is the formatting for the printed message
-                            rarityColor, itemName, "|r", itemLevel, bag, slot, readableSlotName)) 
-                                                
+                                    -- Color-coded item rarity
+                                    local itemColor = select(4, GetItemQualityColor(itemRarity))
+                                    local coloredItemName = "|c" .. itemColor .. itemName .. "|r" -- Color the item name
+
+                                    -- Include the bag and slot number in the print message
+                                    print(coloredItemName .. " (Item Level: " .. itemLevel .. ") is an upgrade for your " .. slotNamesReadable[slotId] .. "! Found in bag " .. bag .. ", slot " .. slot .. ".")
+                                end
+                            end
+                        else
+                            -- For single slots (e.g., head, chest, back)
+                            local equippedItemLink = GetInventoryItemLink("player", GetInventorySlotInfo(inventorySlotId))
+
+                            -- If there's no equipped item, consider it an upgrade
+                            if not equippedItemLink or (itemLevel > GetDetailedItemLevelInfo(equippedItemLink)) then
+                                upgradesFound = true
+                                printedItems[itemLink] = true
+
+                                -- Color-coded item rarity
+                                local itemColor = select(4, GetItemQualityColor(itemRarity))
+                                local coloredItemName = "|c" .. itemColor .. itemName .. "|r" -- Color the item name
+
+                                -- Include the bag and slot number in the print message
+                                print(coloredItemName .. " (Item Level: " .. itemLevel .. ") is an upgrade for your " .. slotNamesReadable[inventorySlotId] .. "! Found in bag " .. bag .. ", slot " .. slot .. ".")
+                            end
+                        end
                     end
                 end
             end
         end
     end
+
+    -- If no upgrades are found, print a message
+    if not upgradesFound then
+        print("No Upgrades found!")
+    end
 end
--- Here we are making a button to press to print if there is an upgrade, originally it just printed whenever there was a change in the players inventory, but that was really messy.
--- Make the button 
-local button = CreateFrame("Button", "UpgradeButton", Minimap) -- creates a variable and then defines it, createframe is making the ui element and then we've defined it as a buton, gave it a name, and parents it to the minimap 
-button:SetSize(24, 24) -- Size of the button in pixels
-button:SetPoint("TOPRIGHT", Minimap, "TOPRIGHT", -10, -10) -- Position the button around the Minimap
 
--- what the button looks like 
-button:SetNormalTexture("Interface\\Icons\\UI_AllianceIcon-round") -- sets the image that will display where the button is 
-button:GetNormalTexture():SetTexCoord(0.1, 0.9, 0.1, 0.9) -- this crops the image and zooms in slightly to remove edges, found this online, gonna play with it later to see if I actually need it
-button:GetNormalTexture():SetSize(24, 24) -- this sets the image to the same size as the button 
+-- Create the minimap button
+local button = CreateFrame("Button", "UpgradeButton", Minimap)
+button:SetSize(24, 24)
+button:SetPoint("TOPRIGHT", Minimap, "TOPRIGHT", -10, -10)
 
--- make the button work on click 
-button:SetScript("OnClick", function() -- defines the script that will run when the button is clicked
-    CompareInventoryToEquipped() -- this is the function that is called when the button is clicked, comparing the inventory items to the equipped items, which is the function we made above.
-end)
+-- Set button textures
+button:SetNormalTexture("Interface/Icons/UI_AllianceIcon-round")
+button:SetHighlightTexture("Interface/Icons/UI_AllianceIcon-round")
+
+-- Click event to check for upgrades
+button:SetScript("OnClick", CompareInventoryToEquipped)
