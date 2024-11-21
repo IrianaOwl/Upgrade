@@ -10,7 +10,7 @@ local validGearTypes = {}
 -- loaded in the toc file before this one 
 -- This ensures that the addon loads the gear types the player is using 
 local function UpdateValidGearTypes()
-    playerSpecIndex = GetSpecialization()  -- WHY ARE WE CALLING THIS AGAIN WHEN WE CALLED IT ABOVE?
+    playerSpecIndex = GetSpecialization()  
     validGearTypes = {}
 
     if playerSpecIndex and ClassGearTypes[playerClass] then
