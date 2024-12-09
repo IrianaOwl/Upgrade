@@ -1,6 +1,7 @@
-## Interface: 110002
+## Interface: 110005
 ## Version: 1.0.0
 ## Title: Upgrade
 ## Author: IrianaOwl
-## SavedVariables: UpgradeDB
+
+classGear.lua
 Upgrade.lua
