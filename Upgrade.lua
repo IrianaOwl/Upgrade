@@ -23,21 +23,29 @@ local function UpdateValidGearTypes()
 end
 
 
--- Register for specialization change event
+-- Create the frame and register PLAYER_LOGIN first
 local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-frame:RegisterEvent("PLAYER_ENTERING_WORLD")  -- To handle initial spec setting when entering the game
+frame:RegisterEvent("PLAYER_LOGIN")  -- First event to ensure valid initialization
 
--- Event handler to update valid gear types when the specialization changes
+-- Event handler to update valid gear types when necessary
 frame:SetScript("OnEvent", function(self, event, ...)
-    if event == "PLAYER_SPECIALIZATION_CHANGED" or event == "PLAYER_ENTERING_WORLD" then
-        UpdateValidGearTypes()  -- Update valid gear types when spec changes
-        print("Specialization changed, valid gear types updated.")
+    if event == "PLAYER_LOGIN" then
+        -- Ensure everything is initialized after login
+        UpdateValidGearTypes()
+        print("Player logged in, valid gear types initialized.")
+
+        -- Now that login is done, register specialization change events
+        self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+		local newSpec = GetSpecialization()
+		if newSpec ~= playerSpecIndex then	
+			playerSpecIndex = newSpec
+			UpdateValidGearTypes()
+			print("Specialization changed, valid gear types updated.")
+		end
     end
 end)
 
--- Call UpdateValidGearTypes initially to set the valid gear types when the addon loads
-UpdateValidGearTypes()
 
 -- Maps equipment types to the internal slot names (Used in GetInventorySlotInfo)
 local slotNames = {
@@ -176,6 +184,6 @@ end
 -- Create the minimap button
 local button = CreateFrame("Button", "UpgradeButton", Minimap)
 button:SetSize(24, 24)
-button:SetNormalTexture("Interface\\Icons\\UI_AllianceIcon-round")
+button:SetNormalTexture("Interface\\ICONS\\Garrison_GreenArmorUpgrade.BLP")
 button:SetPoint("TOPRIGHT", Minimap, "TOPRIGHT", -2, -2)
 button:SetScript("OnClick", CompareInventoryToEquipped)
