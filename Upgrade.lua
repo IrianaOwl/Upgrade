@@ -1,58 +1,48 @@
 -- Upgrade.lua
--- Check for item level upgrades in the player's inventory and print that to the chat box, all pretty and color-coded to item rarity when you click a button
+-- Check for item level upgrades in the player's inventory and print that to the chat box,
+-- all pretty and color-coded to item rarity when you click a button.
+-- Also adds "Upgrade available!" in red text to tooltips for better items.
 
--- Load gear types based on class and specialization from classGear.lua
-local _, playerClass = UnitClass("player") -- gets the class of the player character and assigns it to playerClass
-local playerSpecIndex = GetSpecialization()  -- Get specialization index
-local validGearTypes = {} -- Holds valid gear types based on the class and specialization
+local _, playerClass = UnitClass("player")
+local playerSpecIndex = GetSpecialization()
+local validGearTypes = {}
 
--- Function to update valid gear types based on the player's class and specialization
+-- Update valid gear types based on the player's class and specialization
 local function UpdateValidGearTypes()
-    playerSpecIndex = GetSpecialization()  -- Get the current specialization index
-    validGearTypes = {}  -- Clear the previous gear types
-
-    -- Check if the player's specialization is valid and exists in ClassGearTypes
+    playerSpecIndex = GetSpecialization()
+    validGearTypes = {}
     if playerSpecIndex and ClassGearTypes[playerClass] then
-        -- Check if the specialization exists for this class
         validGearTypes = ClassGearTypes[playerClass][playerSpecIndex] or {}
     else
         print("Invalid class or specialization. Falling back to default gear types.")
-        -- Optionally set some default valid gear types if no specialization data is available
         validGearTypes = ClassGearTypes[playerClass] and ClassGearTypes[playerClass]["default"] or {}
     end
 end
 
-
--- Create the frame and register PLAYER_LOGIN first
+-- Frame for login + spec change
 local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_LOGIN")  -- First event to ensure valid initialization
-
--- Event handler to update valid gear types when necessary
+frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
-        -- Ensure everything is initialized after login
         UpdateValidGearTypes()
-        print("Player logged in, valid gear types initialized.")
-
-        -- Now that login is done, register specialization change events
+        print("Upgrade addon loaded. Valid gear types initialized.")
         self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
-		local newSpec = GetSpecialization()
-		if newSpec ~= playerSpecIndex then	
-			playerSpecIndex = newSpec
-			UpdateValidGearTypes()
-			print("Specialization changed, valid gear types updated.")
-		end
+        local newSpec = GetSpecialization()
+        if newSpec ~= playerSpecIndex then
+            playerSpecIndex = newSpec
+            UpdateValidGearTypes()
+            print("Specialization changed, valid gear types updated.")
+        end
     end
 end)
 
-
--- Maps equipment types to the internal slot names (Used in GetInventorySlotInfo)
+-- Mapping equip slots to Blizzard slot names
 local slotNames = {
     ["INVTYPE_HEAD"] = "HEADSLOT",
     ["INVTYPE_NECK"] = "NECKSLOT",
     ["INVTYPE_SHOULDER"] = "SHOULDERSLOT",
-    ["INVTYPE_CLOAK"] = "BACKSLOT", -- Ensure this is present for back items
+    ["INVTYPE_CLOAK"] = "BACKSLOT",
     ["INVTYPE_CHEST"] = "CHESTSLOT",
     ["INVTYPE_ROBE"] = "CHESTSLOT",
     ["INVTYPE_SHIRT"] = "SHIRTSLOT",
@@ -62,24 +52,23 @@ local slotNames = {
     ["INVTYPE_WAIST"] = "WAISTSLOT",
     ["INVTYPE_LEGS"] = "LEGSSLOT",
     ["INVTYPE_FEET"] = "FEETSLOT",
-    ["INVTYPE_FINGER"] = {"FINGER0SLOT", "FINGER1SLOT"}, -- Rings
-    ["INVTYPE_TRINKET"] = {"TRINKET0SLOT", "TRINKET1SLOT"}, -- Trinkets
-    ["INVTYPE_2HWEAPON"] = "MAINHANDSLOT", -- 2H weapons
-    ["INVTYPE_WEAPON"] = "MAINHANDSLOT", -- 1H weapons
-    ["INVTYPE_WEAPONMAINHAND"] = "MAINHANDSLOT", -- Main hand weapon
-    ["INVTYPE_WEAPONOFFHAND"] = "SECONDARYHANDSLOT", -- Off hand weapon
-    ["INVTYPE_HOLDABLE"] = "SECONDARYHANDSLOT", -- Holdable items
-    ["INVTYPE_SHIELD"] = "SECONDARYHANDSLOT", -- Shields
-    -- Treat ranged weapons like 2H weapons for inventory comparison
-    ["INVTYPE_RANGED"] = "MAINHANDSLOT", -- Ranged weapons (Bows, Crossbows, Guns) are treated as 2H weapons
+    ["INVTYPE_FINGER"] = {"FINGER0SLOT", "FINGER1SLOT"},
+    ["INVTYPE_TRINKET"] = {"TRINKET0SLOT", "TRINKET1SLOT"},
+    ["INVTYPE_2HWEAPON"] = "MAINHANDSLOT",
+    ["INVTYPE_WEAPON"] = "MAINHANDSLOT",
+    ["INVTYPE_WEAPONMAINHAND"] = "MAINHANDSLOT",
+    ["INVTYPE_WEAPONOFFHAND"] = "SECONDARYHANDSLOT",
+    ["INVTYPE_HOLDABLE"] = "SECONDARYHANDSLOT",
+    ["INVTYPE_SHIELD"] = "SECONDARYHANDSLOT",
+    ["INVTYPE_RANGED"] = "MAINHANDSLOT",
 }
 
--- Maps the internal slot names to something nicer to look at when printed
+-- Friendly slot names for printing
 local slotNamesReadable = {
     HEADSLOT = "Head",
     NECKSLOT = "Neck",
     SHOULDERSLOT = "Shoulders",
-    BACKSLOT = "Back",  -- Ensure this is included
+    BACKSLOT = "Back",
     CHESTSLOT = "Chest",
     SHIRTSLOT = "Shirt",
     TABARDSLOT = "Tabard",
@@ -93,95 +82,111 @@ local slotNamesReadable = {
     TRINKET0SLOT = "Trinket 1",
     TRINKET1SLOT = "Trinket 2",
     MAINHANDSLOT = "Main Hand",
-    SECONDARYHANDSLOT = "Off Hand"
+    SECONDARYHANDSLOT = "Off Hand",
 }
 
--- Function to check if the item is a valid type, it checks validGearTypes which is defined for the current class and specialization.
--- It also checks for Miscellaneous, Finger, Trinket, and Cloak because those are often special cases.
+-- Check if item type is valid for player
 local function IsValidItemType(itemSubType, equipSlot)
-    -- First, check if validGearTypes exists for the class and spec
     if not validGearTypes or #validGearTypes == 0 then
-        return false  -- If no valid gear types exist for the class/spec, return false
+        return false
     end
-
-
-    -- Check exclusions for the specific specialization
     if validGearTypes.exclusions and validGearTypes.exclusions[itemSubType] then
-        return false  -- If the item subtype is in the exclusions list, return false
+        return false
     end
-    -- Check if the item is in the valid gear types for the specialization or is a special case like rings, trinkets, or cloaks
-    return tContains(validGearTypes, itemSubType) or 
-           equipSlot == "INVTYPE_FINGER" or 
-           equipSlot == "INVTYPE_TRINKET" or 
-           equipSlot == "INVTYPE_CLOAK" or
-           equipSlot == "INVTYPE_NECK" or
-           equipSlot == "INVTYPE_RANGED" -- Treating ranged weapons like 2H weapons for comparison
+    return tContains(validGearTypes, itemSubType)
+        or equipSlot == "INVTYPE_FINGER"
+        or equipSlot == "INVTYPE_TRINKET"
+        or equipSlot == "INVTYPE_CLOAK"
+        or equipSlot == "INVTYPE_NECK"
+        or equipSlot == "INVTYPE_RANGED"
 end
 
--- Function to print the upgrade message with the info listed in brackets next to the function name, then call the item rarity color and make it pretty
+-- Check if an item is an upgrade
+local function IsUpgradeItem(itemLink, equipSlot)
+    if not itemLink then return false end
+    local itemLevel = GetDetailedItemLevelInfo(itemLink)
+    if not itemLevel then return false end
+    local inventorySlotId = slotNames[equipSlot]
+    if not inventorySlotId then return false end
+
+    if type(inventorySlotId) == "table" then
+        for _, slotId in ipairs(inventorySlotId) do
+            local equippedLink = GetInventoryItemLink("player", GetInventorySlotInfo(slotId))
+            local equippedItemLevel = equippedLink and GetDetailedItemLevelInfo(equippedLink) or 0
+            if itemLevel > equippedItemLevel then
+                return true
+            end
+        end
+    else
+        local equippedLink = GetInventoryItemLink("player", GetInventorySlotInfo(inventorySlotId))
+        local equippedItemLevel = equippedLink and GetDetailedItemLevelInfo(equippedLink) or 0
+        if itemLevel > equippedItemLevel then
+            return true
+        end
+    end
+    return false
+end
+
+-- Print upgrade message
 local function PrintUpgradeMessage(itemName, itemRarity, itemLevel, inventorySlotId, bag, slot)
     local itemColor = select(4, GetItemQualityColor(itemRarity))
-    local coloredItemName = "|c" .. itemColor .. itemName .. "|r" -- Color the item name
-    print(coloredItemName .. " (Item Level: " .. itemLevel .. ") is an upgrade for your " .. slotNamesReadable[inventorySlotId] .. "! Found in bag " .. bag .. ", slot " .. slot .. ".")
+    local coloredItemName = "|c" .. itemColor .. itemName .. "|r"
+    local message = string.format("%s (Item Level: %d) is an upgrade for your %s!",
+        coloredItemName, itemLevel, slotNamesReadable[inventorySlotId])
+    print(message .. string.format(" Found in bag %d, slot %d.", bag, slot))
 end
 
--- Function to compare items in the inventory with equipped items
+-- Tooltip hook: mark upgrades
+TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+    if not data then return end
+    if not tooltip.GetItem then return end  -- CHECK: method exists
+    local name, itemLink = tooltip:GetItem()
+    if not itemLink then return end
+
+    local itemName, _, _, _, _, _, itemSubType, _, equipSlot = GetItemInfo(itemLink)
+    if not itemName then return end
+
+    if not IsValidItemType(itemSubType, equipSlot) then return end
+
+    if IsUpgradeItem(itemLink, equipSlot) then
+        tooltip:AddLine("|cffff2020Upgrade available!|r", 1, 0, 0)
+        tooltip:Show()
+    end
+end)
+
+
+-- Compare inventory to equipped items
 local function CompareInventoryToEquipped()
     local upgradesFound = false
-
-    -- Loop through all of the players bags
     for bag = 0, 4 do
         local numSlots = C_Container.GetContainerNumSlots(bag)
         for slot = 1, numSlots do
             local itemLink = C_Container.GetContainerItemLink(bag, slot)
             if itemLink then
-                -- Retrieve item info from inventory
                 local itemName, _, itemRarity, _, _, _, itemSubType, _, equipSlot = GetItemInfo(itemLink)
-                local itemLevel = GetDetailedItemLevelInfo(itemLink)
-
-                -- Check if item type matches the class-specific gear types
-                if IsValidItemType(itemSubType, equipSlot) then
+                if IsValidItemType(itemSubType, equipSlot) and IsUpgradeItem(itemLink, equipSlot) then
                     local inventorySlotId = slotNames[equipSlot]
-
                     if inventorySlotId then
-                        local equippedItemLink
                         if type(inventorySlotId) == "table" then
-                            -- Handle slots with multiple possible locations (e.g., finger/trinket)
                             for _, slotId in ipairs(inventorySlotId) do
-                                equippedItemLink = GetInventoryItemLink("player", GetInventorySlotInfo(slotId))
-                                local equippedItemLevel = equippedItemLink and GetDetailedItemLevelInfo(equippedItemLink) or 0
-
-                                -- Check for upgrades
-                                if not equippedItemLink or itemLevel > equippedItemLevel then
-                                    upgradesFound = true
-                                    PrintUpgradeMessage(itemName, itemRarity, itemLevel, slotId, bag, slot)
-                                end
+                                PrintUpgradeMessage(itemName, itemRarity, GetDetailedItemLevelInfo(itemLink), slotId, bag, slot)
+                                upgradesFound = true
                             end
                         else
-                            -- Single item slot, like main hand
-                            equippedItemLink = GetInventoryItemLink("player", GetInventorySlotInfo(inventorySlotId))
-                            local equippedItemLevel = equippedItemLink and GetDetailedItemLevelInfo(equippedItemLink) or 0
-
-                            -- Check for upgrades
-                            if not equippedItemLink or itemLevel > equippedItemLevel then
-                                upgradesFound = true
-                                PrintUpgradeMessage(itemName, itemRarity, itemLevel, inventorySlotId, bag, slot)
-                            end
+                            PrintUpgradeMessage(itemName, itemRarity, GetDetailedItemLevelInfo(itemLink), inventorySlotId, bag, slot)
+                            upgradesFound = true
                         end
                     end
                 end
             end
         end
     end
-
-    -- If no upgrades were found, print a message saying so
     if not upgradesFound then
         print("No upgrades found!")
     end
 end
 
-
--- Create the minimap button
+-- Minimap button
 local button = CreateFrame("Button", "UpgradeButton", Minimap)
 button:SetSize(24, 24)
 button:SetNormalTexture("Interface\\ICONS\\Garrison_GreenArmorUpgrade.BLP")
