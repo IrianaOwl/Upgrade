@@ -1,7 +1,13 @@
-## Interface: 110005
+## Interface: 112000
 ## Version: 1.0.0
 ## Title: Upgrade
 ## Author: IrianaOwl
+## RequiredDeps:
+## SavedVariables:
+## SavedVariablesPerCharacter: UpgradeDB
+# Libraries
 
+
+# Load Addon Files
 classGear.lua
 Upgrade.lua
