@@ -3,7 +3,8 @@
 -- all pretty and color-coded to item rarity when you click a button.
 -- Also adds "Upgrade available!" in red text to tooltips for better items.
 
-local _, playerClass = UnitClass("player")
+-- Load gear types based on class and specialization from classGear.lua
+local _, playerClass = UnitClass("player") 
 local playerSpecIndex = GetSpecialization()
 local validGearTypes = {}
 
@@ -19,13 +20,12 @@ local function UpdateValidGearTypes()
     end
 end
 
--- Frame for login + spec change
+-- Create the Frame for login + spec change
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
         UpdateValidGearTypes()
-        print("Upgrade addon loaded. Valid gear types initialized.")
         self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
         local newSpec = GetSpecialization()
@@ -37,7 +37,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
     end
 end)
 
--- Mapping equip slots to Blizzard slot names
+-- Maps equipment types to the Blizzard slot names (Used in GetInventorySlotInfo)
 local slotNames = {
     ["INVTYPE_HEAD"] = "HEADSLOT",
     ["INVTYPE_NECK"] = "NECKSLOT",
@@ -63,7 +63,7 @@ local slotNames = {
     ["INVTYPE_RANGED"] = "MAINHANDSLOT",
 }
 
--- Friendly slot names for printing
+-- Maps the internal slot names to something nicer to look at when printed
 local slotNamesReadable = {
     HEADSLOT = "Head",
     NECKSLOT = "Neck",
@@ -85,7 +85,8 @@ local slotNamesReadable = {
     SECONDARYHANDSLOT = "Off Hand",
 }
 
--- Check if item type is valid for player
+-- Check if the item type is valid for the player, it checks validGearTypes which is defined for the current class and specialization.
+-- It also checks for Miscellaneous, Finger, Trinket, and Cloak because those are often special cases.
 local function IsValidItemType(itemSubType, equipSlot)
     if not validGearTypes or #validGearTypes == 0 then
         return false
@@ -102,6 +103,8 @@ local function IsValidItemType(itemSubType, equipSlot)
 end
 
 -- Check if an item is an upgrade
+-- This first part makes sure we have enough information to work with, if the itemLink is missing, the item level can't be
+-- read, or there is no slot mapping for equipSlot, then it exits early
 local function IsUpgradeItem(itemLink, equipSlot)
     if not itemLink then return false end
     local itemLevel = GetDetailedItemLevelInfo(itemLink)
@@ -109,6 +112,9 @@ local function IsUpgradeItem(itemLink, equipSlot)
     local inventorySlotId = slotNames[equipSlot]
     if not inventorySlotId then return false end
 
+-- Some gear types, like rings or trinkets can go in multiple slots, if inventorySlotId is a table, the code loops through each possible slot
+-- For each slot we get the currently equipped itemLink, retrieve its item level (or 0 if nothing is equipped), if the new item has a higher level 
+-- than what's in that slot, its considered an upgrade
     if type(inventorySlotId) == "table" then
         for _, slotId in ipairs(inventorySlotId) do
             local equippedLink = GetInventoryItemLink("player", GetInventorySlotInfo(slotId))
@@ -117,6 +123,7 @@ local function IsUpgradeItem(itemLink, equipSlot)
                 return true
             end
         end
+-- For items that can only go in one slot, we do the same comparison logic but just once
     else
         local equippedLink = GetInventoryItemLink("player", GetInventorySlotInfo(inventorySlotId))
         local equippedItemLevel = equippedLink and GetDetailedItemLevelInfo(equippedLink) or 0
@@ -127,7 +134,8 @@ local function IsUpgradeItem(itemLink, equipSlot)
     return false
 end
 
--- Print upgrade message
+-- Print upgrade message, takes the info we got from above, colors the item name by rarity, and constructs a readable message about where the upgrade is
+-- in the players bags and then prints it to the chat box.
 local function PrintUpgradeMessage(itemName, itemRarity, itemLevel, inventorySlotId, bag, slot)
     local itemColor = select(4, GetItemQualityColor(itemRarity))
     local coloredItemName = "|c" .. itemColor .. itemName .. "|r"
@@ -136,7 +144,8 @@ local function PrintUpgradeMessage(itemName, itemRarity, itemLevel, inventorySlo
     print(message .. string.format(" Found in bag %d, slot %d.", bag, slot))
 end
 
--- Tooltip hook: mark upgrades
+-- This is where we add a tooltip to items that are upgrades.
+-- It calls IsValidItemType and IsUpgradeItem and if IsUpgradeItem is true then it adds the tooltip
 TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
     if not data then return end
     if not tooltip.GetItem then return end  -- CHECK: method exists
@@ -156,6 +165,8 @@ end)
 
 
 -- Compare inventory to equipped items
+-- Loops through the players bags, gets the item info, filters based off IsValidItemType and IsUpgradeItem, maps the items to their equipment slot
+-- and then prints the information to the chat log, also has a fallback if there is nothing that passes IsUpgradeItem
 local function CompareInventoryToEquipped()
     local upgradesFound = false
     for bag = 0, 4 do
@@ -186,9 +197,10 @@ local function CompareInventoryToEquipped()
     end
 end
 
--- Minimap button
+-- Minimap button, hooks into CompareIventoryToEquipped when clicked
 local button = CreateFrame("Button", "UpgradeButton", Minimap)
 button:SetSize(24, 24)
 button:SetNormalTexture("Interface\\ICONS\\Garrison_GreenArmorUpgrade.BLP")
 button:SetPoint("TOPRIGHT", Minimap, "TOPRIGHT", -2, -2)
 button:SetScript("OnClick", CompareInventoryToEquipped)
+
